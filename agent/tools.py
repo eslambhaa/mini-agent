@@ -1,3 +1,4 @@
+import json
 import subprocess
 from typing import Dict, Any, Optional, Tuple
 from agent.safety import (
@@ -11,6 +12,28 @@ from agent.safety import (
 MAX_OUTPUT_CHARS = 4000
 DEFAULT_TIMEOUT_SEC = 30
 MAX_SEARCH_RESULTS = 50
+
+
+def _check_json(file_path: Path) -> Optional[str]:
+    """يتحقق إن ملف JSON صالح، ويرجع رسالة الخطأ للموديل لو فيه مشكلة."""
+    try:
+        json.loads(file_path.read_text(encoding="utf-8"))
+        return None
+    except json.JSONDecodeError as err:
+        return f"JSONError في السطر {err.lineno}: {err.msg}. الملف لازم يكون JSON صالح، واستخدم json.dump بدل كتابة الـ dict كنص."
+
+
+def _check_syntax(file_path: Path) -> Optional[str]:
+    """يفحص صياغة ملفات بايثون قبل أي تشغيل ويرجع رسالة الخطأ للموديل لو فيه مشكلة."""
+    if file_path.suffix == ".json":
+        return _check_json(file_path)
+    if file_path.suffix != ".py":
+        return None
+    try:
+        compile(file_path.read_text(encoding="utf-8"), str(file_path), "exec")
+        return None
+    except SyntaxError as err:
+        return f"SyntaxError في السطر {err.lineno}: {err.msg}. صلح الصياغة وحاول تاني."
 
 
 def _truncate_output(text: str, max_chars: int = MAX_OUTPUT_CHARS) -> str:
@@ -66,6 +89,9 @@ def write_file(rel_path: str, content: str) -> str:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
         rel_saved = file_path.relative_to(WORKSPACE_DIR)
+        syntax_err = _check_syntax(file_path)
+        if syntax_err:
+            return f"Success: تم حفظ الملف '{rel_saved}' ({len(content)} bytes).\nWarning: {syntax_err}"
         return f"Success: تم حفظ الملف '{rel_saved}' ({len(content)} bytes)."
     except SecurityViolationError as sec_err:
         return f"Security Error: {sec_err}"
@@ -124,6 +150,9 @@ def edit_file(rel_path: str, old_text: str, new_text: str) -> str:
             return f"Error: فشل التعديل على '{rel_path}': {reason}"
 
         file_path.write_text(new_content, encoding="utf-8")
+        syntax_err = _check_syntax(file_path)
+        if syntax_err:
+            return f"Success: تم تعديل الملف '{rel_path}'.\nWarning: {syntax_err}"
         return f"Success: تم تعديل الملف '{rel_path}'."
     except SecurityViolationError as sec_err:
         return f"Security Error: {sec_err}"
