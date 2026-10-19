@@ -31,7 +31,9 @@ Work inside the sandboxed workspace. Be direct and concise.
 7. finish: {{"summary": "done"}}
 
 === RULES ===
-- For simple scripts (like printing sequences), use direct loops and simple print statements without complex generators.
+- Keep code simple and direct. Avoid complex constructs when a plain loop or print statement is enough.
+- If a tool result contains 'Warning', fix that file with write_file or edit_file and check again BEFORE calling finish. Do not create a different file to work around it.
+- For .json files, write valid JSON text directly with write_file (double quotes only), not Python code.
 - Write simple, clean code and test it using `run_bash` before finishing.
 - Respond with ONLY a single valid JSON object.
 
