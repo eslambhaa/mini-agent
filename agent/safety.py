@@ -45,7 +45,7 @@ ALLOWED_COMMANDS = {
     "find", "mkdir", "touch", "pytest", "ruff", "python3",
 }
 
-ALLOWED_GIT_SUBCOMMANDS = {"status", "diff", "log", "add", "commit", "branch", "show"}
+ALLOWED_GIT_SUBCOMMANDS = {"status", "diff", "log", "branch", "show"}
 
 DANGEROUS_FIND_FLAGS = {"-exec", "-execdir", "-ok", "-delete"}
 

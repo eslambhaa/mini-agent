@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from typing import Dict, Any, Optional, Tuple
 from agent.safety import (
@@ -7,6 +8,7 @@ from agent.safety import (
     ensure_workspace_exists,
     validate_workspace_path,
     validate_bash_command,
+    _ask_user_approval,
 )
 
 MAX_OUTPUT_CHARS = 4000
@@ -195,6 +197,56 @@ def search_files(query: str, path: str = ".") -> str:
         return f"Error searching files: {err}"
 
 
+SECRET_FILE_RE = re.compile(r"(^|/)(\.env(\..*)?|id_rsa.*|.*\.(pem|key))$")
+
+
+def _git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(WORKSPACE_DIR),
+        capture_output=True,
+        text=True,
+        timeout=DEFAULT_TIMEOUT_SEC,
+    )
+
+
+def git_commit(message: str) -> str:
+    """يجهز commit في مساحة العمل، يعرض الملفات المتغيرة، ويستنى موافقة المستخدم. لا يعمل push أبداً."""
+    ensure_workspace_exists()
+    if not message or not message.strip():
+        return "Error: أداة git_commit محتاجة مفتاح 'message' فيه رسالة الـ commit."
+    try:
+        if _git("rev-parse", "--is-inside-work-tree").returncode != 0:
+            return "Error: مساحة العمل مش مستودع git، والمستخدم لازم يعمل git init بنفسه."
+
+        _git("add", "-A")
+        names = _git("diff", "--cached", "--name-only").stdout.splitlines()
+        if not names:
+            return "لا توجد تغييرات للـ commit."
+
+        for name in names:
+            if SECRET_FILE_RE.search(name):
+                _git("reset", "-q")
+                return f"Security Error: الملف '{name}' شكله ملف أسرار ومش هيتعمل له commit."
+
+        print("\n" + _git("diff", "--cached", "--stat").stdout.strip())
+        approved, reason = _ask_user_approval(
+            f'git commit -m "{message}"',
+            ["commit جديد، راجع الملفات المعروضة فوق"],
+        )
+        if not approved:
+            _git("reset", "-q")
+            return f"Commit مرفوض: {reason}"
+
+        result = _git("commit", "-m", message)
+        out = (result.stdout + result.stderr).strip()
+        return _truncate_output(f"Exit Code: {result.returncode}\n{out}")
+    except subprocess.TimeoutExpired:
+        return "Error: git تجاوز المهلة الزمنية."
+    except Exception as err:
+        return f"Error in git_commit: {err}"
+
+
 def run_bash(command: str, timeout: int = DEFAULT_TIMEOUT_SEC) -> str:
     """تشغيل أمر Terminal آمن داخل ~/agent-workspace فقط مع مهلة زمنية."""
     ensure_workspace_exists()
@@ -243,11 +295,13 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> str:
         return search_files(args.get("query", ""), args.get("path", "."))
     elif tool_name == "run_bash":
         return run_bash(args.get("command", ""))
+    elif tool_name == "git_commit":
+        return git_commit(args.get("message", ""))
     else:
         return (
             f"Error: الأداة '{tool_name}' غير معروفة. "
             "الأدوات المتاحة فقط: list_files, read_file, write_file, edit_file, "
-            "search_files, run_bash, finish. لتنفيذ أمر شل مثل mkdir استخدم run_bash "
+            "search_files, run_bash, git_commit, finish. لتنفيذ أمر شل مثل mkdir استخدم run_bash "
             "مع args: {\"command\": \"mkdir -p dir\"}."
         )
 

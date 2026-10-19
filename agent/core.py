@@ -29,6 +29,7 @@ Work inside the sandboxed workspace. Be direct and concise.
 5. search_files: {{"query": "text", "path": "."}}
 6. run_bash: {{"command": "python3 file.py"}}
 7. finish: {{"summary": "done"}}
+8. git_commit: {{"message": "short commit message"}} (asks the user for approval)
 
 === RULES ===
 - Keep code simple and direct. Avoid complex constructs when a plain loop or print statement is enough.
