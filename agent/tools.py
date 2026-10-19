@@ -1,5 +1,5 @@
 import subprocess
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 from agent.safety import (
     WORKSPACE_DIR,
     SecurityViolationError,
@@ -10,6 +10,7 @@ from agent.safety import (
 
 MAX_OUTPUT_CHARS = 4000
 DEFAULT_TIMEOUT_SEC = 30
+MAX_SEARCH_RESULTS = 50
 
 
 def _truncate_output(text: str, max_chars: int = MAX_OUTPUT_CHARS) -> str:
@@ -72,6 +73,97 @@ def write_file(rel_path: str, content: str) -> str:
         return f"Error writing file '{rel_path}': {err}"
 
 
+def _fuzzy_replace(content: str, old_text: str, new_text: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    يستبدل old_text بـ new_text داخل content.
+    أولاً يحاول المطابقة الحرفية، ولو فشلت يطابق سطراً بسطر متجاهلاً المسافات
+    البادئة والزائدة، لأن النماذج الصغيرة بتخطئ كتير في عدد المسافات.
+    يرجع (المحتوى الجديد, None) عند النجاح، أو (None, سبب الفشل).
+    """
+    if not old_text.strip():
+        return None, "old_text فارغ، لازم تحدد الجزء اللي عايز تغيّره."
+
+    occurrences = content.count(old_text)
+    if occurrences == 1:
+        return content.replace(old_text, new_text, 1), None
+    if occurrences > 1:
+        return None, f"old_text موجود {occurrences} مرات، أضف أسطر إضافية عشان يبقى فريداً."
+
+    old_lines = [line.strip() for line in old_text.strip("\n").splitlines()]
+    file_lines = content.splitlines(keepends=True)
+    stripped_lines = [line.strip() for line in file_lines]
+    n = len(old_lines)
+
+    matches = [
+        i for i in range(len(file_lines) - n + 1)
+        if stripped_lines[i:i + n] == old_lines
+    ]
+    if not matches:
+        return None, "old_text غير موجود في الملف، اقرا الملف تاني وانسخ الجزء بالظبط."
+    if len(matches) > 1:
+        return None, f"old_text يطابق {len(matches)} أماكن، أضف أسطر إضافية عشان يبقى فريداً."
+
+    start = matches[0]
+    new_block = new_text if new_text.endswith("\n") else new_text + "\n"
+    file_lines[start:start + n] = [new_block]
+    return "".join(file_lines), None
+
+
+def edit_file(rel_path: str, old_text: str, new_text: str) -> str:
+    """تعديل جزء محدد من ملف موجود بدل إعادة كتابته كاملاً."""
+    try:
+        file_path = validate_workspace_path(rel_path)
+        if not file_path.exists():
+            return f"Error: الملف '{rel_path}' غير موجود."
+        if not file_path.is_file():
+            return f"Error: '{rel_path}' ليس ملفاً عادياً."
+
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        new_content, reason = _fuzzy_replace(content, old_text, new_text)
+        if new_content is None:
+            return f"Error: فشل التعديل على '{rel_path}': {reason}"
+
+        file_path.write_text(new_content, encoding="utf-8")
+        return f"Success: تم تعديل الملف '{rel_path}'."
+    except SecurityViolationError as sec_err:
+        return f"Security Error: {sec_err}"
+    except Exception as err:
+        return f"Error editing file '{rel_path}': {err}"
+
+
+def search_files(query: str, path: str = ".") -> str:
+    """البحث عن نص داخل الملفات في مساحة العمل وإرجاع رقم السطر لكل تطابق."""
+    if not query:
+        return "Error: query فارغ."
+    try:
+        base = validate_workspace_path(path)
+        if not base.exists():
+            return f"Error: المسار '{path}' غير موجود."
+
+        candidates = [base] if base.is_file() else sorted(base.rglob("*"))
+        results = []
+        for file_path in candidates:
+            if not file_path.is_file():
+                continue
+            try:
+                lines = file_path.read_text(encoding="utf-8").splitlines()
+            except (UnicodeDecodeError, OSError):
+                continue
+            rel_item = file_path.relative_to(WORKSPACE_DIR)
+            for line_no, line in enumerate(lines, start=1):
+                if query in line:
+                    results.append(f"{rel_item}:{line_no}: {line.strip()}")
+                    if len(results) >= MAX_SEARCH_RESULTS:
+                        results.append(f"...[توقف البحث عند {MAX_SEARCH_RESULTS} نتيجة]")
+                        return _truncate_output("\n".join(results))
+
+        return _truncate_output("\n".join(results)) if results else f"لا توجد نتائج لـ '{query}'."
+    except SecurityViolationError as sec_err:
+        return f"Security Error: {sec_err}"
+    except Exception as err:
+        return f"Error searching files: {err}"
+
+
 def run_bash(command: str, timeout: int = DEFAULT_TIMEOUT_SEC) -> str:
     """تشغيل أمر Terminal آمن داخل ~/agent-workspace فقط مع مهلة زمنية."""
     ensure_workspace_exists()
@@ -112,6 +204,10 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> str:
         return read_file(args.get("path", ""))
     elif tool_name == "write_file":
         return write_file(args.get("path", ""), args.get("content", ""))
+    elif tool_name == "edit_file":
+        return edit_file(args.get("path", ""), args.get("old_text", ""), args.get("new_text", ""))
+    elif tool_name == "search_files":
+        return search_files(args.get("query", ""), args.get("path", "."))
     elif tool_name == "run_bash":
         return run_bash(args.get("command", ""))
     else:
@@ -120,18 +216,9 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> str:
 
 if __name__ == "__main__":
     print("🛠️ اختبار أدوات الوكيل داخل مساحة العمل...")
-
-    w_res = write_file("hello_test.py", "print('Hello from Mini-Agent Workspace!')\n")
-    print("1. Write File ->", w_res)
-
-    l_res = list_files(".")
-    print("2. List Files ->\n" + l_res)
-
-    r_res = read_file("hello_test.py")
-    print("3. Read File ->", r_res.strip())
-
-    b_res = run_bash("python3 hello_test.py")
-    print("4. Run Bash ->\n" + b_res)
-
-    clean_res = run_bash("rm hello_test.py")
-    print("5. Cleanup ->", clean_res)
+    print("1. Write ->", write_file("hello_test.py", "def f():\n    return 1\n"))
+    print("2. Edit exact ->", edit_file("hello_test.py", "    return 1", "    return 2"))
+    print("3. Edit (single line, no indent) ->", edit_file("hello_test.py", "return 2", "return 3"))
+    print("4. Search ->\n" + search_files("return", "."))
+    print("5. Run ->", run_bash("python3 hello_test.py"))
+    print("6. Cleanup ->", run_bash("rm hello_test.py"))
