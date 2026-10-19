@@ -196,6 +196,8 @@ def search_files(query: str, path: str = ".") -> str:
 def run_bash(command: str, timeout: int = DEFAULT_TIMEOUT_SEC) -> str:
     """تشغيل أمر Terminal آمن داخل ~/agent-workspace فقط مع مهلة زمنية."""
     ensure_workspace_exists()
+    if not command or not command.strip():
+        return "Error: أداة run_bash محتاجة مفتاح 'command' فيه نص الأمر. مثال: {\"tool\": \"run_bash\", \"args\": {\"command\": \"python3 hello.py\"}}"
     is_safe, reason = validate_bash_command(command)
     if not is_safe:
         return f"Security Error: {reason}"
