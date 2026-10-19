@@ -1,5 +1,4 @@
 import json
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,16 +20,18 @@ You work strictly inside the sandboxed workspace directory.
 === AVAILABLE TOOLS ===
 1. list_files: {{"path": "."}}
 2. read_file: {{"path": "relative/path.py"}}
-3. write_file: {{"path": "relative/path.py", "content": "full file code"}}
+3. write_file: {{"path": "relative/path.py", "content": "full file content"}}
 4. run_bash: {{"command": "python3 relative/path.py"}}
 5. finish: {{"summary": "Final answer and summary of what was accomplished"}}
 
 === STRICT OUTPUT FORMAT ===
-Respond with ONLY a single valid JSON object per turn. Do NOT add extra text outside the JSON:
+Respond with ONLY a single valid JSON object per turn.
+Required keys: "thought", "tool", and "args".
+Example:
 {{
   "thought": "Brief explanation of your next step",
-  "tool": "tool_name",
-  "args": {{ ... }}
+  "tool": "write_file",
+  "args": {{"path": "example.txt", "content": "hello"}}
 }}
 """
 
@@ -55,22 +56,21 @@ def log_event(event_data: Dict[str, Any]) -> None:
 
 
 def parse_agent_json(raw_text: str) -> Optional[Dict[str, Any]]:
-    """استخراج كائن JSON من رد الموديل حتى لو أحيط بعلامات Markdown."""
+    """تحليل كائن JSON الناتج من الموديل مع معالجة الأقواس المتداخلة بأمان."""
     if not raw_text:
         return None
 
     cleaned = raw_text.strip()
-    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
-    if fence_match:
-        cleaned = fence_match.group(1)
-    else:
-        brace_match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
-        if brace_match:
-            cleaned = brace_match.group(1)
-
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(cleaned[start : end + 1])
+            except json.JSONDecodeError:
+                return None
         return None
 
 
@@ -96,7 +96,7 @@ class MiniAgent:
 
         for step in range(1, self.max_steps + 1):
             print(f"\n--- [Step {step}/{self.max_steps}] ---")
-            raw_reply = self.llm.chat(messages)
+            raw_reply = self.llm.chat(messages, json_mode=True)
             action = parse_agent_json(raw_reply or "")
 
             if not action or "tool" not in action:
@@ -105,13 +105,15 @@ class MiniAgent:
                 messages.append({"role": "assistant", "content": raw_reply or ""})
                 messages.append({
                     "role": "user",
-                    "content": "Error: Invalid JSON format. Respond ONLY with a valid JSON object containing 'thought', 'tool', and 'args'."
+                    "content": "Error: Respond ONLY with a valid JSON object containing keys: 'thought', 'tool', and 'args'."
                 })
                 continue
 
             thought = action.get("thought", "")
             tool_name = action.get("tool", "")
             args = action.get("args", {})
+            if not isinstance(args, dict):
+                args = {}
 
             print(f"💭 التفكير: {thought}")
             print(f"🔧 الأداة: {tool_name} | المعاملات: {json.dumps(args, ensure_ascii=False)}")
