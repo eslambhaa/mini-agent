@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 from typing import List as _L
 
-WORKSPACE_DIR = Path(os.path.expanduser("~/agent-workspace")).resolve()
+WORKSPACE_DIR = Path(os.path.expanduser(os.environ.get("MINI_AGENT_WORKSPACE", "~/agent-workspace"))).resolve()
 
 SYSTEM_BIN_DIRS = [
     "/usr/bin",
