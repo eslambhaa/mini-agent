@@ -7,3 +7,11 @@
 - Avg steps per task: about 3.9
 - JSON parse errors: 0
 - Only recurring failure: 5_json_generation (3 of 6 runs)
+
+## Update after commit de10d45 (prompt rules)
+
+- Runs: 6, 5 tasks each
+- Success rate: 93.3% average
+- 5_json_generation: passed 6 of 6
+- Failures (one each): 2_python_bugfix, 4_bash_automation
+- Avg steps per task: about 4.0
