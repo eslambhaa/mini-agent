@@ -15,3 +15,11 @@
 - 5_json_generation: passed 6 of 6
 - Failures (one each): 2_python_bugfix, 4_bash_automation
 - Avg steps per task: about 4.0
+
+## Update after tools fixes (search by name, unknown-tool message)
+
+- Runs: 3 (latest set), 5 tasks each
+- Success rate: 100%
+- Avg steps per task: 4.2
+- JSON parse errors: 0
+- No failures; 4_bash_automation passed 3 of 3
