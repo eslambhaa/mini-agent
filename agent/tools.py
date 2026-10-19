@@ -174,11 +174,13 @@ def search_files(query: str, path: str = ".") -> str:
         for file_path in candidates:
             if not file_path.is_file():
                 continue
+            rel_item = file_path.relative_to(WORKSPACE_DIR)
+            if query in file_path.name:
+                results.append(f"[FILE] {rel_item}")
             try:
                 lines = file_path.read_text(encoding="utf-8").splitlines()
             except (UnicodeDecodeError, OSError):
                 continue
-            rel_item = file_path.relative_to(WORKSPACE_DIR)
             for line_no, line in enumerate(lines, start=1):
                 if query in line:
                     results.append(f"{rel_item}:{line_no}: {line.strip()}")
