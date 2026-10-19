@@ -244,7 +244,12 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> str:
     elif tool_name == "run_bash":
         return run_bash(args.get("command", ""))
     else:
-        return f"Error: الأداة '{tool_name}' غير معروفة."
+        return (
+            f"Error: الأداة '{tool_name}' غير معروفة. "
+            "الأدوات المتاحة فقط: list_files, read_file, write_file, edit_file, "
+            "search_files, run_bash, finish. لتنفيذ أمر شل مثل mkdir استخدم run_bash "
+            "مع args: {\"command\": \"mkdir -p dir\"}."
+        )
 
 
 if __name__ == "__main__":
