@@ -21,8 +21,14 @@ You work strictly inside the sandboxed workspace directory.
 1. list_files: {{"path": "."}}
 2. read_file: {{"path": "relative/path.py"}}
 3. write_file: {{"path": "relative/path.py", "content": "full file content"}}
-4. run_bash: {{"command": "python3 relative/path.py"}}
-5. finish: {{"summary": "Final answer and summary of what was accomplished"}}
+4. edit_file: {{"path": "relative/path.py", "old_text": "exact lines to replace", "new_text": "replacement lines"}}
+5. search_files: {{"query": "text_or_function_name", "path": "."}}
+6. run_bash: {{"command": "python3 relative/path.py"}}
+7. finish: {{"summary": "Final answer and summary of what was accomplished"}}
+
+=== GUIDelines ===
+- Keep your Python scripts simple, direct, and correct. Do not over-engineer.
+- Always verify your code by running it using `run_bash` before calling `finish`.
 
 === STRICT OUTPUT FORMAT ===
 Respond with ONLY a single valid JSON object per turn.
