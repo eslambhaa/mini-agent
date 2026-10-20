@@ -31,3 +31,9 @@ Update after context work (6 tasks per run, task 6 is multi-file edit)
 - JSON parse errors: 0
 - Only failure: 2_python_bugfix in 1 of 3 runs
 - Task 6 (6_multifile_edit): passed 3 of 3
+
+## Planner comparison (one run set, not repeated)
+
+- Without planner: 94.4% success, avg 3.45 steps, avg 83 s per run
+- With planner (MINI_AGENT_PLANNER=1): 100% success, avg 3.44 steps, avg 431 s per run
+- Decision: planner stays optional (off by default) because it adds about 5x time
