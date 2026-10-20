@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 from agent.llm import LocalLLM
 from agent.tools import execute_tool
 from agent.skills_manager import get_active_skills_prompt
+from agent.skill_stats import record_task
 from agent.planner import make_plan
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -116,6 +117,7 @@ class MiniAgent:
         print(f"🚀 Mini Coder Task (with Skills & Memory): {task}")
         log_event({"event": "task_start", "task": task})
 
+        used_tools = []
         for step in range(1, self.max_steps + 1):
             print(f"\n--- [Step {step}/{self.max_steps}] ---")
             raw_reply = self.llm.chat(messages, json_mode=True)
@@ -138,10 +140,12 @@ class MiniAgent:
             if tool_name == "finish":
                 summary = args.get("summary", "Done.")
                 print(f"\n✅ Finished: {summary}")
+                record_task(used_tools, True)
                 log_event({"event": "task_finish", "step": step, "summary": summary})
                 return summary
 
             observation = execute_tool(tool_name, args)
+            used_tools.append((tool_name, observation))
             print(f"📋 Result:\n{observation}")
 
             log_event({
@@ -156,6 +160,7 @@ class MiniAgent:
             messages.append({"role": "assistant", "content": json.dumps(action, ensure_ascii=False)})
             messages.append({"role": "user", "content": f"Tool Observation:\n{observation}"})
 
+        record_task(used_tools, False)
         return "⚠️ Max steps reached."
 
 
