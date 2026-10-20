@@ -23,3 +23,11 @@
 - Avg steps per task: 4.2
 - JSON parse errors: 0
 - No failures; 4_bash_automation passed 3 of 3
+
+Update after context work (6 tasks per run, task 6 is multi-file edit)
+- Runs: 3 (latest set)
+- Success rate: 94.4% average (run scores 83.3, 100, 100)
+- Avg steps per task: 3.0
+- JSON parse errors: 0
+- Only failure: 2_python_bugfix in 1 of 3 runs
+- Task 6 (6_multifile_edit): passed 3 of 3
