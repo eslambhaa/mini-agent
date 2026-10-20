@@ -55,7 +55,7 @@ Example:
 def load_memory() -> str:
     if not MEMORY_FILE.exists():
         return "No memory found."
-    return "\n".join(MEMORY_FILE.read_text(encoding="utf-8").splitlines()[:30])
+    return "\n".join(MEMORY_FILE.read_text(encoding="utf-8").splitlines()[:50])
 
 
 def log_event(event_data: Dict[str, Any]) -> None:
