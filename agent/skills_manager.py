@@ -33,7 +33,8 @@ def get_active_skills_prompt() -> str:
     descriptions = []
     for s in skills:
         content = load_skill_content(s)
-        first_line = content.splitlines()[0] if content else s
+        useful = [ln.strip() for ln in content.splitlines() if ln.strip() and not ln.strip().startswith('#')]
+        first_line = useful[0] if useful else s
         descriptions.append(f"- **{s}**: {first_line}")
 
     return "\n".join(descriptions)
