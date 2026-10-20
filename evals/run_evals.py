@@ -32,6 +32,25 @@ def setup_buggy_file() -> None:
     (WORKSPACE_DIR / "eval_2_buggy.py").write_text(buggy_code, encoding="utf-8")
 
 
+def setup_multifile_project() -> None:
+    """تجهيز مشروع من 3 ملفات للمهمة السادسة (إيجاد دالة وتعديلها)."""
+    project = WORKSPACE_DIR / "proj6"
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "config.py").write_text("APP_NAME = 'Shop'\nCURRENCY = 'EGP'\n", encoding="utf-8")
+    (project / "helpers.py").write_text(
+        "def format_price(value):\n    return f'{value:.2f}'\n",
+        encoding="utf-8",
+    )
+    (project / "utils.py").write_text(
+        "def compute_tax(amount):\n    rate = 0.10\n    return amount * rate\n",
+        encoding="utf-8",
+    )
+    (project / "main.py").write_text(
+        "from utils import compute_tax\n\nprint('Tax:', compute_tax(100))\n",
+        encoding="utf-8",
+    )
+
+
 EVAL_SUITE = [
     {
         "id": "1_python_fib",
@@ -107,6 +126,23 @@ EVAL_SUITE = [
             (WORKSPACE_DIR / "eval_5_out.json").exists()
             and json.loads((WORKSPACE_DIR / "eval_5_out.json").read_text(encoding="utf-8")).get("status") == "passed"
             and json.loads((WORKSPACE_DIR / "eval_5_out.json").read_text(encoding="utf-8")).get("count") == 3
+        ),
+    },
+    {
+        "id": "6_multifile_edit",
+        "name": "Find and Edit a Function in a Multi-file Project",
+        "setup": setup_multifile_project,
+        "prompt": (
+            "The folder 'proj6' is a small project with several files. Find which file defines "
+            "the function compute_tax and change its rate from 0.10 to 0.15 using edit_file. "
+            "Verify by running 'python3 proj6/main.py' with run_bash, then finish."
+        ),
+        "verify": lambda: (
+            (WORKSPACE_DIR / "proj6" / "main.py").exists()
+            and "Tax: 15.0" in __import__("subprocess").run(
+                ["python3", str(WORKSPACE_DIR / "proj6" / "main.py")],
+                capture_output=True, text=True, timeout=10
+            ).stdout
         ),
     },
 ]

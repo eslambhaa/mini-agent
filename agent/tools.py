@@ -1,3 +1,4 @@
+import ast
 import json
 import re
 import subprocess
@@ -67,7 +68,14 @@ def list_files(rel_path: str = ".") -> str:
         return f"Error listing files: {err}"
 
 
-def read_file(rel_path: str) -> str:
+def _to_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def read_file(rel_path: str, start_line: Any = None, end_line: Any = None) -> str:
     """قراءة محتوى ملف نصي من داخل مساحة العمل."""
     try:
         file_path = validate_workspace_path(rel_path)
@@ -77,6 +85,14 @@ def read_file(rel_path: str) -> str:
             return f"Error: '{rel_path}' ليس ملفاً عادياً."
 
         content = file_path.read_text(encoding="utf-8", errors="replace")
+        if start_line is not None or end_line is not None:
+            lines = content.splitlines()
+            start = max(_to_int(start_line, 1), 1)
+            end = min(_to_int(end_line, len(lines)), len(lines))
+            if start > end:
+                return f"Error: نطاق الأسطر غير صالح، الملف فيه {len(lines)} سطر."
+            numbered = [f"{n}: {lines[n - 1]}" for n in range(start, end + 1)]
+            return _truncate_output("\n".join(numbered))
         return _truncate_output(content)
     except SecurityViolationError as sec_err:
         return f"Security Error: {sec_err}"
@@ -197,6 +213,62 @@ def search_files(query: str, path: str = ".") -> str:
         return f"Error searching files: {err}"
 
 
+MAP_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv"}
+MAX_MAP_FILES = 60
+
+
+def _py_outline(file_path: Path) -> list:
+    """يستخرج الكلاسات والدوال وأرقام أسطرها من ملف بايثون بمكتبة ast بدون استهلاك توكن."""
+    try:
+        tree = ast.parse(file_path.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return ["    (تعذر تحليل الملف)"]
+    func_types = (ast.FunctionDef, ast.AsyncFunctionDef)
+    lines = []
+    for node in tree.body:
+        if isinstance(node, func_types):
+            lines.append(f"    def {node.name}  (line {node.lineno})")
+        elif isinstance(node, ast.ClassDef):
+            lines.append(f"    class {node.name}  (line {node.lineno})")
+            for sub in node.body:
+                if isinstance(sub, func_types):
+                    lines.append(f"        def {sub.name}  (line {sub.lineno})")
+    return lines
+
+
+def project_map(path: str = ".") -> str:
+    """خريطة المشروع: الملفات، وللملفات py الكلاسات والدوال مع أرقام الأسطر."""
+    try:
+        base = validate_workspace_path(path)
+        if not base.exists():
+            return f"Error: المسار '{path}' غير موجود."
+        candidates = [base] if base.is_file() else sorted(base.rglob("*"))
+        files = []
+        for item in candidates:
+            if not item.is_file():
+                continue
+            parts = item.relative_to(base).parts if base.is_dir() else ()
+            if any(part in MAP_SKIP_DIRS or part.startswith(".") for part in parts):
+                continue
+            files.append(item)
+
+        out = []
+        for item in files[:MAX_MAP_FILES]:
+            rel = item.relative_to(WORKSPACE_DIR)
+            if item.suffix == ".py":
+                out.append(str(rel))
+                out.extend(_py_outline(item))
+            else:
+                out.append(f"{rel}  ({item.stat().st_size} bytes)")
+        if len(files) > MAX_MAP_FILES:
+            out.append(f"...[عرض أول {MAX_MAP_FILES} ملف من {len(files)}]")
+        return _truncate_output("\n".join(out)) if out else "(لا توجد ملفات)"
+    except SecurityViolationError as sec_err:
+        return f"Security Error: {sec_err}"
+    except Exception as err:
+        return f"Error building project map: {err}"
+
+
 SECRET_FILE_RE = re.compile(r"(^|/)(\.env(\..*)?|id_rsa.*|.*\.(pem|key))$")
 
 
@@ -286,7 +358,7 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> str:
     if tool_name == "list_files":
         return list_files(args.get("path", "."))
     elif tool_name == "read_file":
-        return read_file(args.get("path", ""))
+        return read_file(args.get("path", ""), args.get("start_line"), args.get("end_line"))
     elif tool_name == "write_file":
         return write_file(args.get("path", ""), args.get("content", ""))
     elif tool_name == "edit_file":
@@ -297,11 +369,13 @@ def execute_tool(tool_name: str, args: Dict[str, Any]) -> str:
         return run_bash(args.get("command", ""))
     elif tool_name == "git_commit":
         return git_commit(args.get("message", ""))
+    elif tool_name == "project_map":
+        return project_map(args.get("path", "."))
     else:
         return (
             f"Error: الأداة '{tool_name}' غير معروفة. "
             "الأدوات المتاحة فقط: list_files, read_file, write_file, edit_file, "
-            "search_files, run_bash, git_commit, finish. لتنفيذ أمر شل مثل mkdir استخدم run_bash "
+            "search_files, run_bash, git_commit, project_map, finish. لتنفيذ أمر شل مثل mkdir استخدم run_bash "
             "مع args: {\"command\": \"mkdir -p dir\"}."
         )
 
