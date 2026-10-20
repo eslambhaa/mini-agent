@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 from agent.llm import LocalLLM
 from agent.tools import execute_tool
 from agent.skills_manager import get_active_skills_prompt
+from agent.planner import make_plan
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MEMORY_FILE = BASE_DIR / "MEMORY.md"
@@ -82,18 +83,31 @@ def parse_agent_json(raw_text: str) -> Optional[Dict[str, Any]]:
 
 
 class MiniAgent:
-    def __init__(self, max_steps: int = 7):
+    def __init__(self, max_steps: int = 7, use_planner: bool = False):
         self.llm = LocalLLM()
         self.max_steps = max_steps
+        self.use_planner = use_planner
 
     def run_task(self, task: str) -> str:
         if not self.llm.is_server_running():
             return "❌ Error: Ollama is not running."
 
+        plan_text = ""
+        if self.use_planner:
+            steps, plan_error = make_plan(task)
+            if steps:
+                plan_text = "\n\nPlan to follow:\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(steps, start=1))
+                print("🗺️ الخطة:" + plan_text)
+                log_event({"event": "plan", "task": task, "steps": steps})
+            else:
+                print(f"⚠️ المخطط ما رجعش خطة، هكمل من غير خطة: {plan_error}")
+                log_event({"event": "plan_failed", "task": task, "error": plan_error})
+
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             memory=load_memory(),
             skills=get_active_skills_prompt(),
         )
+        system_prompt = system_prompt + plan_text
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Task: {task}"},

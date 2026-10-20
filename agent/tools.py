@@ -165,6 +165,8 @@ def edit_file(rel_path: str, old_text: str, new_text: str) -> str:
         content = file_path.read_text(encoding="utf-8", errors="replace")
         new_content, reason = _fuzzy_replace(content, old_text, new_text)
         if new_content is None:
+            if new_text and new_text.strip() and new_text in content:
+                return f"Success: الملف '{rel_path}' فيه النص الجديد بالفعل، مفيش تعديل مطلوب تاني."
             return f"Error: فشل التعديل على '{rel_path}': {reason}"
 
         file_path.write_text(new_content, encoding="utf-8")

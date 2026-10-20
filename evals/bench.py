@@ -33,7 +33,7 @@ def new_events(before):
 
 def run_once(run_index):
     clean_workspace()
-    agent = MiniAgent(max_steps=6)
+    agent = MiniAgent(max_steps=6, use_planner=os.getenv("MINI_AGENT_PLANNER") == "1")
     details = []
     start_all = time.time()
 
